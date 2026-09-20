@@ -22,15 +22,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, "docs")
 
 # ===================== 参数区 (可改) =====================
+# 权重按 A 股市场有效性排序: 反转/低波/乖离等 A 股特色因子在前且权重大,
+# 动量(中期>短期)、趋势次之, 量能配比垫底。元组: (显示ID, 名称, 方向, 权重, 原始因子键)
 WEIGHTS = [
-    ("F1", "动量20日", "up", 25),
-    ("F2", "动量60日", "up", 20),
-    ("F3", "趋势排列", "up", 15),
-    ("F4", "位置突破", "up", 10),
-    ("F5", "短期反转", "down", 10),
-    ("F6", "低波动", "down", 10),
-    ("F7", "量能配比", "up", 5),
-    ("F8", "乖离保护", "down", 5),
+    ("F1", "短期反转", "down", 20, "f5"),
+    ("F2", "低波动", "down", 15, "f6"),
+    ("F3", "动量60日", "up", 15, "f2"),
+    ("F4", "动量20日", "up", 15, "f1"),
+    ("F5", "趋势排列", "up", 10, "f3"),
+    ("F6", "位置突破", "up", 10, "f4"),
+    ("F7", "乖离保护", "down", 10, "f8"),
+    ("F8", "量能配比", "up", 5, "f7"),
 ]
 MARKET_INDEX = "sh000001"
 
@@ -209,14 +211,16 @@ def main():
         raws.append(r)
 
     # 横截面百分位 -> 加权综合分
-    keymap = ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"]
+    keymap = []
+    for w in WEIGHTS:
+        if w[4] not in keymap:
+            keymap.append(w[4])
     cols = {k: [r.get(k) for r in raws] for k in keymap}
     for r in raws:
         total, wsum = 0.0, 0.0
         scores = {}
-        for fid, _dn, d, w in WEIGHTS:
-            k = fid.lower()
-            p = pct_rank(r.get(k), cols[k])
+        for fid, _dn, d, w, rk in WEIGHTS:
+            p = pct_rank(r.get(rk), cols[rk])
             if p is None:
                 scores[fid] = None
                 continue
@@ -303,19 +307,13 @@ button:hover{background:#30363d}
 <body>
 <div class="wrap">
 <h1>ETF 多因子增强打分</h1>
-<div class="sub">A股口径 8 因子 · 横截面排名打分 · 数据源: 新浪财经日K · 更新: <span id="upd">—</span></div>
+<div class="sub">A股口径 8 因子(按A股有效性排序加权) · 横截面排名打分 · 数据源: 新浪财经日K · 更新: <span id="upd">—</span></div>
 <div id="chips"></div>
 <div id="mt" class="mt"></div>
 <div id="banner"></div>
 <div style="overflow-x:auto">
 <table id="tb">
-<thead><tr>
-<th data-k="idx">#</th><th data-k="name">名称</th><th data-k="price">现价</th>
-<th data-k="chg1d">日涨跌</th><th data-k="total">综合分</th>
-<th data-k="f1">F1动量20</th><th data-k="f2">F2动量60</th><th data-k="f3">F3趋势</th>
-<th data-k="f4">F4位置</th><th data-k="f5">F5反转</th><th data-k="f6">F6低波</th>
-<th data-k="f7">F7量能</th><th data-k="f8">F8乖离</th><th data-k="signal">信号</th>
-</tr></thead>
+<thead id="thead"><tr></tr></thead>
 <tbody></tbody>
 </table>
 </div>
@@ -333,8 +331,9 @@ button:hover{background:#30363d}
 </div>
 
 <div class="foot">
-因子口径: F1/F2 价格动量(越强越好) · F3 收盘与均线多头排列 · F4 收盘在120日区间位置(越高越接近突破) ·
-F5 近5日涨幅(反向, 涨太多减分) · F6 20日波动率(反向, 越低越好) · F7 5日均量/60日均量(温和放量加分) · F8 相对MA20乖离(反向, 防追高)。<br>
+因子口径(按A股有效性排序): F1 近5日涨幅反转(反向, A股散户市最强) · F2 20日波动率(反向, 低波占优) ·
+F3/F4 动量60/20日(越强越好, 中期动量比短期稳) · F5 收盘与均线多头排列 · F6 收盘在120日区间位置 ·
+F7 相对MA20乖离(反向, 反转家族防追高) · F8 5日均量/60日均量(温和放量加分)。<br>
 信号档位: 综合分 ≥75 强势·可买 | 60-75 持有·关注 | 45-60 观察 | &lt;45 回避。<br>
 本页面为量化工具输出, 不构成投资建议; 历史规律可能失效, 仓位与止损纪律优先。配套看板:
 <a href="https://wangjun20251978.github.io/ETF-ROTATION-PRO/" style="color:#58a6ff">三因子轮动看板</a>
@@ -344,7 +343,6 @@ F5 近5日涨幅(反向, 涨太多减分) · F6 20日波动率(反向, 越低越
 var DATA=__DATA__;
 var WEIGHTS=__WEIGHTS_JSON__;
 var WMAP={};WEIGHTS.forEach(function(w){WMAP[w[0]]=w});
-var UP="F1 F2 F3 F4 F7".split(" ");
 function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
 function fmt(v,d){return v===null||v===undefined?"—":Number(v).toFixed(d===undefined?2:d)}
 function sgn(v){if(v===null||v===undefined)return '<span class="flat">—</span>';return '<span class="'+(v>=0?"pos":"neg")+'">'+(v>=0?"+":"")+v.toFixed(2)+"%</span>"}
@@ -352,7 +350,16 @@ function heat(v){if(v===null||v===undefined)return '<span class="flat">—</span
 function sigCls(t){return t>=75?"s1":t>=60?"s2":t>=45?"s3":"s4"}
 function scoreColor(t){return t>=75?"#f85149":t>=60?"#d29922":t>=45?"#8b949e":"#3fb950"}
 
+function buildHead(){
+  var base=[["idx","#"],["name","名称"],["price","现价"],["chg1d","日涨跌"],["total","综合分"]];
+  var h="";
+  base.forEach(function(c){h+='<th data-k="'+c[0]+'">'+c[1]+"</th>"});
+  WEIGHTS.forEach(function(w){h+='<th data-k="'+w[0]+'">'+w[0]+w[1]+"</th>"});
+  h+='<th data-k="signal">信号</th>';
+  document.querySelector("#thead tr").innerHTML=h;
+}
 function render(){
+  buildHead();
   document.getElementById("upd").textContent=DATA.updated||"—";
   var chips="";
   WEIGHTS.forEach(function(w){
@@ -384,17 +391,17 @@ function draw(rows){
     h+="<tr><td>"+(i+1)+'</td><td class="l"><b>'+esc(r.name)+"</b> <span class='flat'>"+r.code+"</span></td>";
     h+="<td>"+fmt(r.price)+"</td><td>"+sgn(r.chg1d)+"</td>";
     h+='<td><b style="color:'+scoreColor(r.total)+'">'+fmt(r.total,1)+'</b><span class="scorebar"><i style="width:'+(r.total||0)+"%;background:"+scoreColor(r.total)+'"></i></span></td>';
-    ["f1","f2","f3","f4","f5","f6","f7","f8"].forEach(function(k){h+="<td>"+heat(r.scores?r.scores[k]:null)+"</td>"});
+    WEIGHTS.forEach(function(w){h+="<td>"+heat(r.scores?r.scores[w[0]]:null)+"</td>"});
     h+='<td><span class="sig '+sigCls(r.total||0)+'">'+esc(r.signal||"—")+"</span></td></tr>";
   });
   tb.innerHTML=h;
 }
-document.querySelectorAll("#tb th").forEach(function(th){
-  th.addEventListener("click",function(){
-    var k=th.dataset.k;
-    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=false}
-    draw(DATA.rows||[]);
-  });
+document.getElementById("thead").addEventListener("click",function(e){
+  var th=e.target.closest("th");
+  if(!th)return;
+  var k=th.dataset.k;
+  if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=false}
+  draw(DATA.rows||[]);
 });
 
 /* ===================== 个股实时打分 (东方财富 JSONP) ===================== */
@@ -421,11 +428,12 @@ function absScores(closes,vols){
   out.s.f3=mx?pts/mx*100:null;
   var hi=-1e9,lo=1e9;for(var i=Math.max(0,n-120);i<n;i++){hi=Math.max(hi,closes[i]);lo=Math.min(lo,closes[i])}
   out.s.f4=hi>lo?(c-lo)/(hi-lo)*100:50;
+  out.raw.pos=hi>lo?(c-lo)/(hi-lo)*100:50;
   out.s.f5=ret5===null?null:clamp(50-ret5*10,0,100);
   out.s.f6=vol20===null?null:clamp(100-vol20*20,0,100);
   out.s.f7=vr===null?null:lin(Math.min(vr,3),0.3,2.5);
   out.s.f8=out.raw.bias===null?null:clamp(60-out.raw.bias*5,0,100);
-  var t=0,w=0;WEIGHTS.forEach(function(x){if(out.s[x[0]]!==null&&out.s[x[0]]!==undefined){t+=out.s[x[0]]*x[3];w+=x[3]}});
+  var t=0,w=0;WEIGHTS.forEach(function(x){var sv=out.s[x[4]];if(sv!==null&&sv!==undefined){t+=sv*x[3];w+=x[3]}});
   out.total=w?Math.round(t/w*10)/10:null;
   return out;
 }
@@ -465,12 +473,13 @@ function scoreStock(){
     h+=" <span class='flat'>截至 "+lastDay+" K线 "+closes.length+" 根</span></div>";
     h+="<div style='margin:8px 0'><b style='font-size:22px;color:"+scoreColor(t)+"'>"+fmt(t,1)+"</b> ";
     h+="<span class='sig "+sigCls(t||0)+"'>"+sig+"</span></div>";
+    var RMAP={f1:"ret20",f2:"ret60",f4:"pos",f5:"ret5",f6:"vol20",f7:"vr",f8:"bias"};
     WEIGHTS.forEach(function(w){
-      var v=r.s[w[0]];
+      var v=r.s[w[4]];
       var raw="";
-      if(w[0]==="f3"&&r.raw)raw=" "+r.raw.pts+"/"+r.raw.mx;
-      else if(r.raw&&r.raw[{f1:"ret20",f2:"ret60",f5:"ret5",f6:"vol20",f7:"vr",f8:"bias",f4:"pos"}[w[0]]]!==undefined&&r.raw[{f1:"ret20",f2:"ret60",f5:"ret5",f6:"vol20",f7:"vr",f8:"bias"}[w[0]]]!==null&&r.raw[{f1:"ret20",f2:"ret60",f5:"ret5",f6:"vol20",f7:"vr",f8:"bias"}[w[0]]]!==undefined){
-        var rv=r.raw[{f1:"ret20",f2:"ret60",f5:"ret5",f6:"vol20",f7:"vr",f8:"bias"}[w[0]]];
+      if(w[4]==="f3"&&r.raw){raw=" "+r.raw.pts+"/"+r.raw.mx}
+      else if(r.raw&&RMAP[w[4]]&&r.raw[RMAP[w[4]]]!==null&&r.raw[RMAP[w[4]]]!==undefined){
+        var rv=r.raw[RMAP[w[4]]];
         raw=" "+(typeof rv==="number"?rv.toFixed(2):rv);
       }
       h+="<div class='fbar'><span class='n'>"+w[0]+" "+w[1]+(w[2]==="up"?" ↑":" ↓")+"×"+w[3]+"</span><div class='bar'><i style='width:"+(v||0)+"%;background:"+scoreColor(v||0)+"'></i></div><span class='v'>"+(v===null?"—":v.toFixed(0))+raw+"</span></div>";
