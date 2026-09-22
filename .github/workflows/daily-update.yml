@@ -2,6 +2,7 @@ name: 每日更新因子打分
 on:
   schedule:
     - cron: '35 7 * * *'   # UTC 07:35 = 北京时间 15:35 收盘后, 每天
+    - cron: '10 23 * * *'  # 早场 UTC 23:10 = 北京7:10名义, 实际约8:50-9:40 早场
   workflow_dispatch:
 permissions:
   contents: write
